@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Wordle Game</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="https://cdn.socket.io/4.0.0/socket.io.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', (event) => {
+            const serverIp = '192.168.1.5';  // Replace with your server's IP address
+            const socket = io.connect(`http://${serverIp}:5000`);
+            let currentRoom = prompt('Enter room name:');
+            let currentUser = prompt('Enter your username:');
+            let currentTurn = '';
+
+            socket.emit('join', {username: currentUser, room: currentRoom});
+
+            socket.on('message', function(data) {
+                console.log(data.msg);
+                document.getElementById('messages').innerHTML += `<p>${data.msg}</p>`;
+            });
+
+            socket.on('game_state', function(data) {
+                console.log("Game state received:", data);
+                document.getElementById('gameState').innerHTML = `
+                    <p><strong>Word:</strong> ${data.guessed_word.join(' ')}</p>
+                    <p><strong>Guessed letters:</strong> ${data.guessed_letters.join(', ')}</p>
+                    <p><strong>Lives:</strong> ${data.lives[currentUser]}</p>
+                    <p><strong>Current Turn:</strong> ${data.players[data.current_turn]}</p>
+                `;
+                currentTurn = data.players[data.current_turn];
+                document.getElementById('guessButton').disabled = (currentTurn !== currentUser) || data.game_over;
+                document.getElementById('guessInput').disabled = (currentTurn !== currentUser) || data.game_over;
+
+                if (data.game_over && data.message.includes(currentUser)) {
+                    alert(data.message);
+                }
+            });
+
+            function submitGuess() {
+                let userGuess = document.getElementById('guessInput').value;
+                if (userGuess.length !== 1) {
+                    alert("Please enter only one letter.");
+                    return;
+                }
+                console.log("Submitting guess:", userGuess);
+                socket.emit('guess', {
+                    room: currentRoom,
+                    guess: userGuess,
+                    username: currentUser
+                });
+                document.getElementById('guessInput').value = '';
+            }
+
+            document.getElementById('guessButton').addEventListener('click', submitGuess);
+
+            window.addEventListener('beforeunload', function() {
+                socket.emit('leave', {username: currentUser, room: currentRoom});
+            });
+        });
+    </script>
+</head>
+<body>
+    <h1>Wordle Game</h1>
+    <div id="gameState"></div>
+    <div id="inputContainer">
+        <input type="text" id="guessInput" placeholder="Enter your guess" disabled>
+        <button id="guessButton" disabled>Submit Guess</button>
+    </div>
+    <div id="messages"></div>
+</body>
+</html>
